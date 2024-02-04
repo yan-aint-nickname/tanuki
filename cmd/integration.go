@@ -2,9 +2,10 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/xanzy/go-gitlab"
-	"github.com/spf13/viper"
 	"log"
+
+	"github.com/spf13/viper"
+	"github.com/xanzy/go-gitlab"
 )
 
 const (
@@ -16,8 +17,8 @@ var (
 )
 
 type ComposedBlob struct {
-	Blob []*gitlab.Blob
 	Project *gitlab.Project
+	Blob    []*gitlab.Blob
 }
 
 func initGitlab() (*gitlab.Client, error) {
@@ -88,7 +89,7 @@ func searchBlobs(git *gitlab.Client, searchStr string, projCh <-chan []*gitlab.P
 func prettyPrint(blobs <-chan ComposedBlob) {
 	for composed := range blobs {
 		for _, blob := range composed.Blob {
-			fmt.Printf("\f\033[1;3m%s\033[0m\n\033[4m%s/blob/%s/%s#L%d\033[0m\n%s", composed.Project.Name, composed.Project.WebURL, blob.Ref, blob.Filename, blob.Startline, blob.Data,)
+			fmt.Printf("\f\033[1;3m%s\033[0m\n\033[4m%s/blob/%s/%s#L%d\033[0m\n%s", composed.Project.Name, composed.Project.WebURL, blob.Ref, blob.Filename, blob.Startline, blob.Data)
 		}
 	}
 }
@@ -108,6 +109,6 @@ func SearchBlobsWithinProjects(groupName string, searchString string) {
 
 	composedBlobs := make(chan ComposedBlob)
 	go searchBlobs(git, searchString, projects, composedBlobs)
-	
+
 	prettyPrint(composedBlobs)
 }

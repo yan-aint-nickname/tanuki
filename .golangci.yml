@@ -1,0 +1,48 @@
+service:
+  golangci-lint-version: 1.55.2
+
+run:
+  timeout: 5m
+  go: "1.21.6"
+
+linters-settings:
+  gofmt:
+    simplify: true
+  govet:
+    check-shadowing: true
+    enable-all: true
+  goconst:
+    min-len: 2
+    min-occurrences: 2
+  goimports:
+    local-prefixes: github.com/yan-aint-nickname/tanu
+  golint:
+    min-confidence: 0
+  misspell:
+    locale: US
+
+
+linters:
+  disable-all: true
+  enable:
+    - gofmt
+    - revive
+    - gosimple
+    - govet
+    - ineffassign
+    - unconvert
+    - unused
+    - errcheck
+    - dogsled
+    - dupl
+    - gocritic
+    - gocyclo
+    - goimports
+    - gosec
+    - misspell
+    - nakedret
+    - staticcheck
+    - stylecheck
+    - typecheck
+    - unparam
+    - whitespace
