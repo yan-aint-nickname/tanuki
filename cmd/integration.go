@@ -3,8 +3,8 @@ package cmd
 import (
 	"fmt"
 	"github.com/xanzy/go-gitlab"
+	"github.com/spf13/viper"
 	"log"
-	"os"
 )
 
 const (
@@ -20,37 +20,9 @@ type ComposedBlob struct {
 	Project *gitlab.Project
 }
 
-type Config struct {
-	Server string
-	Token  string
-}
-
-func (c *Config) getToken() {
-	token, ok := os.LookupEnv("TOKEN")
-	if !ok {
-		log.Println("No token provided")
-	}
-	c.Token = token
-}
-
-func (c *Config) getServer() {
-	server, ok := os.LookupEnv("SERVER")
-	if !ok {
-		log.Println("No custom server provided, using default")
-		c.Server = defaultGitlabServer
-	}
-	c.Server = server
-}
-
-func initConfig() *Config {
-	conf := Config{}
-	conf.getServer()
-	conf.getToken()
-	return &conf
-}
-
-func initGitlab(conf Config) (*gitlab.Client, error) {
-	token, server := conf.Token, conf.Server
+func initGitlab() (*gitlab.Client, error) {
+	token, server := viper.GetString("token"), viper.GetString("server")
+	log.Println(server, token)
 	git, err := gitlab.NewClient(token, gitlab.WithBaseURL(server))
 	if err != nil {
 		return nil, err
@@ -122,8 +94,7 @@ func prettyPrint(blobs <-chan ComposedBlob) {
 }
 
 func SearchBlobsWithinProjects(groupName string, searchString string) {
-	conf := initConfig()
-	git, err := initGitlab(*conf)
+	git, err := initGitlab()
 
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
