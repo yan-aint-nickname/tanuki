@@ -23,7 +23,6 @@ type ComposedBlob struct {
 
 func initGitlab() (*gitlab.Client, error) {
 	token, server := viper.GetString("token"), viper.GetString("server")
-	log.Println(server, token)
 	git, err := gitlab.NewClient(token, gitlab.WithBaseURL(server))
 	if err != nil {
 		return nil, err
