@@ -25,3 +25,5 @@ tanuki
 # env files
 .env
 local.env
+
+dist/
