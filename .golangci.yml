@@ -1,6 +1,3 @@
-service:
-  golangci-lint-version: 1.55.2
-
 run:
   timeout: 5m
   go: "1.21.6"
@@ -9,22 +6,22 @@ linters-settings:
   gofmt:
     simplify: true
   govet:
-    check-shadowing: true
     enable-all: true
   goconst:
     min-len: 2
     min-occurrences: 2
   goimports:
     local-prefixes: github.com/yan-aint-nickname/tanu
-  golint:
-    min-confidence: 0
   misspell:
     locale: US
+  lll:
+    line-length: 120
 
 
 linters:
   disable-all: true
   enable:
+    - lll
     - gofmt
     - revive
     - gosimple
