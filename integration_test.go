@@ -46,13 +46,11 @@ func TestSearchListGroup(t *testing.T) {
 			fmt.Fprint(w, `[{"id": 1, "name": "Foobar Group"}]`)
 		})
 
-	groupChan := make(chan []*gitlab.Group)
-	go searchListGroups(client, "foobar", groupChan)
+	groups := searchListGroups(client, "foobar")
 
 	want := &gitlab.Group{ID: 1, Name: "Foobar Group"}
-	for _, g := range <-groupChan {
-		if !reflect.DeepEqual(want, g) {
-			t.Errorf("searchListGroups returned +%v, want %+v", g, want)
-		}
+	g := groups[0][0]
+	if !reflect.DeepEqual(want, g) {
+		t.Errorf("searchListGroups returned +%v, want %+v", g, want)
 	}
 }
