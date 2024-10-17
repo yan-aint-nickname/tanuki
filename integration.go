@@ -12,7 +12,7 @@ const (
 )
 
 var (
-	listOptions = gitlab.ListOptions{Page: 1, PerPage: 10}
+	listOptions = &gitlab.ListOptions{Page: 1, PerPage: 10}
 )
 
 type ComposedBlob struct {
@@ -43,9 +43,12 @@ func searchListGroups(git *gitlab.Client, groupName string) [][]*gitlab.Group {
 	return g
 }
 
-func searchListProjects(git *gitlab.Client, groups [][]*gitlab.Group) [][]*gitlab.Project {
+func searchListProjects(git *gitlab.Client, groups [][]*gitlab.Group, listOpts *gitlab.ListOptions) [][]*gitlab.Project {
 	p := make([][]*gitlab.Project, 0, 20)
-	opts := &gitlab.ListGroupProjectsOptions{ListOptions: listOptions}
+	if listOpts == nil {
+		listOpts = listOptions
+	}
+	opts := &gitlab.ListGroupProjectsOptions{ListOptions: *listOpts}
 	for _, group := range groups {
 		for _, g := range group {
 			for {
@@ -64,9 +67,18 @@ func searchListProjects(git *gitlab.Client, groups [][]*gitlab.Group) [][]*gitla
 	return p
 }
 
-func searchBlobs(git *gitlab.Client, projects [][]*gitlab.Project, searchStr string) []ComposedBlob {
+func searchBlobs(
+	git *gitlab.Client,
+	projects [][]*gitlab.Project,
+	searchStr string,
+	listOpts *gitlab.ListOptions,
+) []ComposedBlob {
 	b := make([]ComposedBlob, 0, 20)
-	opts := &gitlab.SearchOptions{ListOptions: listOptions}
+	if listOpts == nil {
+		listOpts = listOptions
+	}
+
+	opts := &gitlab.SearchOptions{ListOptions: *listOpts}
 	for _, proj := range projects {
 		for _, p := range proj {
 			for {
@@ -74,7 +86,6 @@ func searchBlobs(git *gitlab.Client, projects [][]*gitlab.Project, searchStr str
 				if err != nil {
 					log.Fatal(err)
 				}
-
 				b = append(b, ComposedBlob{Blobs: blobs, Project: p})
 
 				if resp.NextPage == 0 {
@@ -87,6 +98,7 @@ func searchBlobs(git *gitlab.Client, projects [][]*gitlab.Project, searchStr str
 	return b
 }
 
+// TODO: use library for ascii color to support all platforms
 func prettyPrintComposedBlobs(composed []ComposedBlob) {
 	for _, c := range composed {
 		for _, blob := range c.Blobs {
@@ -105,10 +117,9 @@ func prettyPrintComposedBlobs(composed []ComposedBlob) {
 
 func SearchBlobsWithinProjects(client *gitlab.Client, groupName, searchString string) {
 	groups := searchListGroups(client, groupName)
+	projects := searchListProjects(client, groups, nil)
 
-	projects := searchListProjects(client, groups)
-
-	blobs := searchBlobs(client, projects, searchString)
+	blobs := searchBlobs(client, projects, searchString, nil)
 
 	prettyPrintComposedBlobs(blobs)
 }
