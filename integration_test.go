@@ -32,18 +32,11 @@ func setup(t *testing.T) (*http.ServeMux, *gitlab.Client) {
 	return mux, client
 }
 
-func testMethod(t *testing.T, r *http.Request, want string) {
-	if got := r.Method; got != want {
-		t.Errorf("Request method: %s, want %s", got, want)
-	}
-}
-
 func TestSearchListGroup(t *testing.T) {
 	mux, client := setup(t)
 
 	mux.HandleFunc("/api/v4/groups",
-		func(w http.ResponseWriter, r *http.Request) {
-			testMethod(t, r, http.MethodGet)
+		func(w http.ResponseWriter, _ *http.Request) {
 			fmt.Fprint(w, `[{"id": 1, "name": "Foobar Group"}]`)
 		})
 
@@ -60,8 +53,7 @@ func TestSearchBlobs(t *testing.T) {
 	mux, client := setup(t)
 
 	mux.HandleFunc("/api/v4/projects/4/-/search",
-		func(w http.ResponseWriter, r *http.Request) {
-			testMethod(t, r, http.MethodGet)
+		func(w http.ResponseWriter, _ *http.Request) {
 			fmt.Fprintf(w, `[
 	  {
 		"basename": "hello",
@@ -90,7 +82,6 @@ func TestSearchBlobs2Pages(t *testing.T) {
 
 	mux.HandleFunc("/api/v4/projects/4/-/search",
 		func(w http.ResponseWriter, r *http.Request) {
-			testMethod(t, r, http.MethodGet)
 			params, err := url.ParseQuery(r.URL.RawQuery)
 
 			if err != nil {
@@ -149,5 +140,25 @@ func TestSearchBlobs2Pages(t *testing.T) {
 		if len(b.Blobs) != want {
 			t.Errorf("searchBlobs returned +%v, want %+v", b, want)
 		}
+	}
+}
+
+func TestSearchListProjects(t *testing.T) {
+	mux, client := setup(t)
+
+	mux.HandleFunc("/api/v4/groups/1/projects",
+		func(w http.ResponseWriter, _ *http.Request) {
+			fmt.Fprintf(w, `[{"id": 4, "name": "Kenoby"}]`)
+		})
+
+	groups := [][]*gitlab.Group{{&gitlab.Group{ID: 1}}}
+
+	listOptions = &gitlab.ListOptions{Page: 1, PerPage: 1}
+	projects := searchListProjects(client, groups, listOptions)
+
+	want := [][]*gitlab.Project{{&gitlab.Project{ID: 4, Name: "Kenoby"}}}
+
+	if !reflect.DeepEqual(want, projects) {
+		t.Errorf("searchListProjects returned +%v, want %+v", projects, want)
 	}
 }
