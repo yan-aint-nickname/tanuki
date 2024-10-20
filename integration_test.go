@@ -2,29 +2,15 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/xanzy/go-gitlab"
 )
-
-// The whole mustWriteHTTPResponse func is copy-paste from xanzy/go-gitlab.
-func mustWriteHTTPResponse(t *testing.T, w io.Writer, fixturePath string) {
-	f, err := os.Open(fixturePath)
-	if err != nil {
-		t.Fatalf("error opening fixture file: %v", err)
-	}
-
-	if _, err = io.Copy(w, f); err != nil {
-		t.Fatalf("error writing response: %v", err)
-	}
-}
 
 // The whole setup func is copy-paste from xanzy/go-gitlab.
 func setup(t *testing.T) (*http.ServeMux, *gitlab.Client) {

@@ -11,7 +11,7 @@ linters-settings:
     min-len: 2
     min-occurrences: 2
   goimports:
-    local-prefixes: github.com/yan-aint-nickname/tanu
+    local-prefixes: github.com/yan-aint-nickname/tanuki
   misspell:
     locale: US
   lll:
@@ -21,25 +21,26 @@ linters-settings:
 linters:
   disable-all: true
   enable:
-    - lll
+    - dogsled
+    - dupl
+    - errcheck
+    - fatcontext
+    - gocognit
+    - gocritic
+    - gocyclo
     - gofmt
-    - revive
+    - goimports
+    - gosec
     - gosimple
     - govet
     - ineffassign
-    - unconvert
-    - unused
-    - errcheck
-    - dogsled
-    - dupl
-    - gocritic
-    - gocyclo
-    - goimports
-    - gosec
+    - lll
     - misspell
     - nakedret
+    - revive
     - staticcheck
     - stylecheck
-    - typecheck
+    - unconvert
     - unparam
+    - unused
     - whitespace

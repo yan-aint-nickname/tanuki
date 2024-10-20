@@ -43,7 +43,11 @@ func searchListGroups(git *gitlab.Client, groupName string) [][]*gitlab.Group {
 	return g
 }
 
-func searchListProjects(git *gitlab.Client, groups [][]*gitlab.Group, listOpts *gitlab.ListOptions) [][]*gitlab.Project {
+func searchListProjects(
+	git *gitlab.Client,
+	groups [][]*gitlab.Group,
+	listOpts *gitlab.ListOptions,
+) [][]*gitlab.Project {
 	p := make([][]*gitlab.Project, 0, 20)
 	if listOpts == nil {
 		listOpts = listOptions
