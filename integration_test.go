@@ -2,10 +2,13 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -160,5 +163,67 @@ func TestSearchListProjects(t *testing.T) {
 
 	if !reflect.DeepEqual(want, projects) {
 		t.Errorf("searchListProjects returned +%v, want %+v", projects, want)
+	}
+}
+
+func TestSearchListProjects2Pages(t *testing.T) {
+	mux, client := setup(t)
+
+	mux.HandleFunc("/api/v4/groups/1/projects",
+		func(w http.ResponseWriter, r *http.Request) {
+			params, err := url.ParseQuery(r.URL.RawQuery)
+
+			if err != nil {
+				t.Errorf("query params are not valid +%v %s", params, err)
+			}
+			switch params.Get("page") {
+			case "1":
+				w.Header().Set("x-next-page", "2")
+				w.Header().Set("x-page", "1")
+				fmt.Fprintf(w, `[{"id": 4, "name": "Kenoby"}]`)
+			case "2":
+				w.Header().Set("x-next-page", "0")
+				w.Header().Set("x-page", "2")
+				w.Header().Set("x-prev-page", "1")
+				fmt.Fprintf(w, `[{"id": 5, "name": "Ahsoka"}]`)
+			}
+		})
+
+	groups := [][]*gitlab.Group{{&gitlab.Group{ID: 1}}}
+
+	listOptions = &gitlab.ListOptions{Page: 1, PerPage: 1}
+	projects := searchListProjects(client, groups, listOptions)
+
+	want := [][]*gitlab.Project{{&gitlab.Project{ID: 4, Name: "Kenoby"}}, {&gitlab.Project{ID: 5, Name: "Ahsoka"}}}
+
+	if !reflect.DeepEqual(want, projects) {
+		t.Errorf("searchListProjects returned +%v, want %+v", projects, want)
+	}
+}
+
+func TestPrettyPrint(t *testing.T) {
+	rescueStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	compBlobs := []ComposedBlob{{
+		Blobs: []*gitlab.Blob{{
+			Basename:  "hello",
+			Data:      "def hello_there():",
+			Filename:  "hello.py",
+			Ref:       "main",
+			Startline: 46,
+			ProjectID: 4,
+		}},
+		Project: &gitlab.Project{ID: 4},
+	}}
+
+	prettyPrintComposedBlobs(compBlobs)
+
+	w.Close()
+	out, _ := io.ReadAll(r)
+	os.Stdout = rescueStdout
+
+	if ok := strings.Contains(string(out), "def hello_there()"); !ok {
+		t.Errorf("out does not contains founded blobs want: `def hello_there()`, have: %s", string(out))
 	}
 }

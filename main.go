@@ -23,22 +23,32 @@ func createConfigFile(f string) error {
 	return nil
 }
 
-func readConfigFile(_ *cli.Context) (src altsrc.InputSourceContext, err error) {
+func getConfigPath() (string, error) {
 	home, err := homedir.Dir()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	f := path.Join(home, ".config", "tanuki", "config.yaml")
+	return path.Join(home, ".config", "tanuki", "config.yaml"), nil
+}
 
-	if src, err = altsrc.NewYamlSourceFromFile(f); err == nil {
+func readConfigFileFn(filename string) (src altsrc.InputSourceContext, err error) {
+	if src, err = altsrc.NewYamlSourceFromFile(filename); err == nil {
 		return src, nil
 	}
 
-	if err = createConfigFile(f); err != nil {
+	if err = createConfigFile(filename); err != nil {
 		return nil, err
 	}
 
-	return altsrc.NewYamlSourceFromFile(f)
+	return altsrc.NewYamlSourceFromFile(filename)
+}
+
+func readConfigFile(_ *cli.Context) (src altsrc.InputSourceContext, err error) {
+	f, err := getConfigPath()
+	if err != nil {
+		return nil, err
+	}
+	return readConfigFileFn(f)
 }
 
 var cmdSearch = &cli.Command{
