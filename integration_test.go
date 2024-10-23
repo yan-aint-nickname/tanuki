@@ -205,7 +205,7 @@ func TestPrettyPrint(t *testing.T) {
 	rescueStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-	compBlobs := []ComposedBlob{{
+	compBlobs := []*ComposedBlob{{
 		Blobs: []*gitlab.Blob{{
 			Basename:  "hello",
 			Data:      "def hello_there():",

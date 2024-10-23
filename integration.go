@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/gookit/color"
 	"github.com/xanzy/go-gitlab"
 )
 
@@ -76,8 +77,8 @@ func searchBlobs(
 	projects [][]*gitlab.Project,
 	searchStr string,
 	listOpts *gitlab.ListOptions,
-) []ComposedBlob {
-	b := make([]ComposedBlob, 0, 20)
+) []*ComposedBlob {
+	b := make([]*ComposedBlob, 0, 20)
 	if listOpts == nil {
 		listOpts = listOptions
 	}
@@ -90,7 +91,7 @@ func searchBlobs(
 				if err != nil {
 					log.Fatal(err)
 				}
-				b = append(b, ComposedBlob{Blobs: blobs, Project: p})
+				b = append(b, &ComposedBlob{Blobs: blobs, Project: p})
 
 				if resp.NextPage == 0 {
 					break
@@ -102,17 +103,21 @@ func searchBlobs(
 	return b
 }
 
-// TODO: use library for ascii color to support all platforms
-func prettyPrintComposedBlobs(composed []ComposedBlob) {
+func prettyPrintComposedBlobs(composed []*ComposedBlob) {
 	for _, c := range composed {
 		for _, blob := range c.Blobs {
+			boldItalic := color.Style{color.OpBold, color.OpItalic}.Render
+			underscore := color.OpUnderscore.Render
 			fmt.Printf(
-				"\f\033[1;3m%s\033[0m\n\033[4m%s/blob/%s/%s#L%d\033[0m\n%s",
-				c.Project.Name,
-				c.Project.WebURL,
-				blob.Ref,
-				blob.Filename,
-				blob.Startline,
+				"%s\n%s\n%s",
+				boldItalic(c.Project.Name),
+				underscore(fmt.Sprintf(
+					"%s/blob/%s/%s#L%d",
+					c.Project.WebURL,
+					blob.Ref,
+					blob.Filename,
+					blob.Startline,
+				)),
 				blob.Data,
 			)
 		}
