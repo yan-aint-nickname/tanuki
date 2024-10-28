@@ -73,10 +73,10 @@ func TestSearchBlobs(t *testing.T) {
 
 	projs := [][]*gitlab.Project{{&gitlab.Project{ID: 4, Name: "Kenoby"}}}
 
-	blobs := searchBlobs(client, projs, "def hello_there", nil)
-	b := blobs[0].Blobs
-	if len(blobs[0].Blobs) == 0 {
-		t.Errorf("searchBlobs returned +%v, want %+v", b, 1)
+	for b := range searchBlobs(client, projs, "def hello_there", nil) {
+		if len(b.Blobs) == 0 {
+			t.Errorf("searchBlobs returned +%v, want %+v", b, 1)
+		}
 	}
 }
 
@@ -132,17 +132,19 @@ func TestSearchBlobs2Pages(t *testing.T) {
 
 	blobs := searchBlobs(client, projs, "def hello_there", listOptions)
 
-	want := 2
+	want := 1
+	chanCounter := 0
 
-	if len(blobs) != want {
-		t.Errorf("searchBlobs returned %d, want %+v", len(blobs), want)
-	}
-
-	want = 1
-	for _, b := range blobs {
+	for b := range blobs {
 		if len(b.Blobs) != want {
 			t.Errorf("searchBlobs returned +%v, want %+v", b, want)
 		}
+		chanCounter++
+	}
+
+	want = 2
+	if chanCounter < want {
+		t.Errorf("searchBlobs returned %d, want %+v", chanCounter, want)
 	}
 }
 
@@ -205,7 +207,7 @@ func TestPrettyPrint(t *testing.T) {
 	rescueStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-	compBlobs := []*ComposedBlob{{
+	compBlobs := &ComposedBlob{
 		Blobs: []*gitlab.Blob{{
 			Basename:  "hello",
 			Data:      "def hello_there():",
@@ -215,7 +217,7 @@ func TestPrettyPrint(t *testing.T) {
 			ProjectID: 4,
 		}},
 		Project: &gitlab.Project{ID: 4},
-	}}
+	}
 
 	prettyPrintComposedBlobs(compBlobs)
 

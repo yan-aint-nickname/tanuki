@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"iter"
 	"log"
 
 	"github.com/gookit/color"
@@ -77,58 +78,66 @@ func searchBlobs(
 	projects [][]*gitlab.Project,
 	searchStr string,
 	listOpts *gitlab.ListOptions,
-) []*ComposedBlob {
-	b := make([]*ComposedBlob, 0, 20)
-	if listOpts == nil {
-		listOpts = listOptions
-	}
+) iter.Seq2[*ComposedBlob, error] {
+	return func(yield func(*ComposedBlob, error) bool) {
+		if listOpts == nil {
+			listOpts = listOptions
+		}
 
-	opts := &gitlab.SearchOptions{ListOptions: *listOpts}
-	for _, proj := range projects {
-		for _, p := range proj {
-			for {
-				blobs, resp, err := git.Search.BlobsByProject(p.ID, searchStr, opts)
-				if err != nil {
-					log.Fatal(err)
-				}
-				b = append(b, &ComposedBlob{Blobs: blobs, Project: p})
+		opts := &gitlab.SearchOptions{ListOptions: *listOpts}
+		for _, proj := range projects {
+			for _, p := range proj {
+				for {
+					blobs, resp, err := git.Search.BlobsByProject(p.ID, searchStr, opts)
+					if err != nil {
+						yield(&ComposedBlob{}, err)
+						return
+					}
+					b := &ComposedBlob{Blobs: blobs, Project: p}
+					if !yield(b, nil) {
+						return
+					}
 
-				if resp.NextPage == 0 {
-					break
+					if resp.NextPage == 0 {
+						break
+					}
+					opts.Page = resp.NextPage
 				}
-				opts.Page = resp.NextPage
 			}
 		}
 	}
-	return b
 }
 
-func prettyPrintComposedBlobs(composed []*ComposedBlob) {
-	for _, c := range composed {
-		for _, blob := range c.Blobs {
-			boldItalic := color.Style{color.OpBold, color.OpItalic}.Render
-			underscore := color.OpUnderscore.Render
-			fmt.Printf(
-				"%s\n%s\n%s",
-				boldItalic(c.Project.Name),
-				underscore(fmt.Sprintf(
-					"%s/blob/%s/%s#L%d",
-					c.Project.WebURL,
-					blob.Ref,
-					blob.Filename,
-					blob.Startline,
-				)),
-				blob.Data,
-			)
-		}
+func prettyPrintComposedBlobs(composed *ComposedBlob) {
+	for _, blob := range composed.Blobs {
+		boldItalic := color.Style{color.OpBold, color.OpItalic}.Render
+		underscore := color.OpUnderscore.Render
+		fmt.Printf(
+			"%s\n%s\n%s",
+			boldItalic(composed.Project.Name),
+			underscore(fmt.Sprintf(
+				"%s/blob/%s/%s#L%d",
+				composed.Project.WebURL,
+				blob.Ref,
+				blob.Filename,
+				blob.Startline,
+			)),
+			blob.Data,
+		)
 	}
 }
 
-func SearchBlobsWithinProjects(client *gitlab.Client, groupName, searchString string) {
+func SearchBlobsWithinProjects(client *gitlab.Client, groupName, searchString string) error {
 	groups := searchListGroups(client, groupName)
 	projects := searchListProjects(client, groups, nil)
 
 	blobs := searchBlobs(client, projects, searchString, nil)
 
-	prettyPrintComposedBlobs(blobs)
+	for blob, err := range blobs {
+		if err != nil {
+			return err
+		}
+		prettyPrintComposedBlobs(blob)
+	}
+	return nil
 }

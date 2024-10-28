@@ -59,8 +59,7 @@ var cmdSearch = &cli.Command{
 		if err != nil {
 			log.Fatalf("Failed to create client: %v", err)
 		}
-		SearchBlobsWithinProjects(client, c.String("group"), c.Args().Get(0))
-		return nil
+		return SearchBlobsWithinProjects(client, c.String("group"), c.Args().Get(0))
 	},
 	Flags: []cli.Flag{
 		&cli.StringFlag{Name: "group", Aliases: []string{"g"}, Usage: "Group/Subgroup in GitLab to search in"},
