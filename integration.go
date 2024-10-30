@@ -22,15 +22,19 @@ type ComposedBlob struct {
 	Blobs   []*gitlab.Blob
 }
 
-func NewGitlabClient(token, server string) (*gitlab.Client, error) {
+type GitlabClient struct {
+	*gitlab.Client
+}
+
+func NewGitlabClient(token, server string) (*GitlabClient, error) {
 	git, err := gitlab.NewClient(token, gitlab.WithBaseURL(server))
 	if err != nil {
 		return nil, err
 	}
-	return git, nil
+	return &GitlabClient{git}, nil
 }
 
-func searchListGroups(git *gitlab.Client, groupName string) [][]*gitlab.Group {
+func (git *GitlabClient) searchListGroups(groupName string) [][]*gitlab.Group {
 	g := make([][]*gitlab.Group, 0, 10)
 	for {
 		groups, resp, err := git.Groups.SearchGroup(groupName)
@@ -45,8 +49,7 @@ func searchListGroups(git *gitlab.Client, groupName string) [][]*gitlab.Group {
 	return g
 }
 
-func searchListProjects(
-	git *gitlab.Client,
+func (git *GitlabClient) searchListProjects(
 	groups [][]*gitlab.Group,
 	listOpts *gitlab.ListOptions,
 ) [][]*gitlab.Project {
@@ -73,8 +76,7 @@ func searchListProjects(
 	return p
 }
 
-func searchBlobs(
-	git *gitlab.Client,
+func (git *GitlabClient) searchBlobs(
 	projects [][]*gitlab.Project,
 	searchStr string,
 	listOpts *gitlab.ListOptions,
@@ -125,19 +127,4 @@ func prettyPrintComposedBlobs(composed *ComposedBlob) {
 			blob.Data,
 		)
 	}
-}
-
-func SearchBlobsWithinProjects(client *gitlab.Client, groupName, searchString string) error {
-	groups := searchListGroups(client, groupName)
-	projects := searchListProjects(client, groups, nil)
-
-	blobs := searchBlobs(client, projects, searchString, nil)
-
-	for blob, err := range blobs {
-		if err != nil {
-			return err
-		}
-		prettyPrintComposedBlobs(blob)
-	}
-	return nil
 }

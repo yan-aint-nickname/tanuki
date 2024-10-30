@@ -1,10 +1,16 @@
 package main
 
 import (
+	"flag"
+	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path"
 	"strings"
 	"testing"
+
+	"github.com/urfave/cli/v2"
 )
 
 func TestGetConfigPath(t *testing.T) {
@@ -65,5 +71,74 @@ func TestReadConfigFile(t *testing.T) {
 	}
 	if server != "https://some_gitlab_server.com" {
 		t.Errorf("Wrong server %+v", server)
+	}
+}
+
+func TestCmdSearch(t *testing.T) {
+	mux, client := setup(t)
+
+	mux.HandleFunc("/api/v4/groups",
+		func(w http.ResponseWriter, _ *http.Request) {
+			fmt.Fprint(w, `[{"id": 1, "name": "StarWars"}]`)
+		})
+
+	mux.HandleFunc("/api/v4/groups/1/projects",
+		func(w http.ResponseWriter, _ *http.Request) {
+			fmt.Fprintf(w, `[{"id": 4, "name": "Kenoby"}]`)
+		})
+
+	mux.HandleFunc("/api/v4/projects/4/-/search",
+		func(w http.ResponseWriter, _ *http.Request) {
+			fmt.Fprintf(w, `[
+	  {
+		"basename": "hello",
+		"data": "def hello_there():",
+		"path": "src/hello.py",
+		"filename": "hello.py",
+		"id": null,
+		"ref": "main",
+		"startline": 46,
+		"project_id": 4
+	  }
+]`)
+		})
+
+	app := buildApp()
+
+	// NOTE: Do I really need this?
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	fs.String("group", "StarWars", "test group")
+	fs.String("token", "test-token", "test token")
+	fs.String("server", "test-server", "test server")
+
+	ctx := cli.NewContext(app, fs, nil)
+
+	if err := ctx.Set("group", "StarWars"); err != nil {
+		t.Error(err)
+	}
+
+	cmdSearch := new(CmdSearch)
+
+	cmdSearch.gitlabClient = client
+
+	rescueStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	args := []string{"hello"}
+	if err := fs.Parse(args); err != nil {
+		t.Error(err)
+	}
+
+	if err := cmdSearch.Search(ctx); err != nil {
+		t.Error(err)
+	}
+
+	w.Close()
+	out, _ := io.ReadAll(r)
+	os.Stdout = rescueStdout
+
+	if ok := strings.Contains(string(out), "def hello_there()"); !ok {
+		t.Errorf("out does not contains founded blobs want: `def hello_there()`, have: %s", string(out))
 	}
 }

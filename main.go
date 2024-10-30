@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path"
@@ -43,6 +44,37 @@ func readConfigFileFn(filename string) (src altsrc.InputSourceContext, err error
 	return altsrc.NewYamlSourceFromFile(filename)
 }
 
+type CmdSearch struct {
+	gitlabClient *GitlabClient
+}
+
+func (cmdSearch *CmdSearch) Search(c *cli.Context) error {
+	if cmdSearch.gitlabClient == nil {
+		client, err := NewGitlabClient(c.String("token"), c.String("server"))
+		if err != nil {
+			return err
+		}
+		cmdSearch.gitlabClient = client
+	}
+	client := cmdSearch.gitlabClient
+
+	fmt.Printf("%+v", c.String("group"))
+	// fmt.Printf("%+v", c.Args().First())
+
+	groups := client.searchListGroups(c.String("group"))
+	projects := client.searchListProjects(groups, nil)
+
+	blobs := client.searchBlobs(projects, c.Args().First(), nil)
+
+	for blob, err := range blobs {
+		if err != nil {
+			return err
+		}
+		prettyPrintComposedBlobs(blob)
+	}
+	return nil
+}
+
 func readConfigFile(_ *cli.Context) (src altsrc.InputSourceContext, err error) {
 	f, err := getConfigPath()
 	if err != nil {
@@ -51,23 +83,23 @@ func readConfigFile(_ *cli.Context) (src altsrc.InputSourceContext, err error) {
 	return readConfigFileFn(f)
 }
 
-var cmdSearch = &cli.Command{
-	Name:  "search",
-	Usage: "Searches blobs in projects within group",
-	Action: func(c *cli.Context) error {
-		client, err := NewGitlabClient(c.String("token"), c.String("server"))
-		if err != nil {
-			log.Fatalf("Failed to create client: %v", err)
-		}
-		return SearchBlobsWithinProjects(client, c.String("group"), c.Args().Get(0))
-	},
-	Flags: []cli.Flag{
-		&cli.StringFlag{Name: "group", Aliases: []string{"g"}, Usage: "Group/Subgroup in GitLab to search in"},
-	},
-}
-
 func buildApp() *cli.App {
-	cmds := []*cli.Command{cmdSearch}
+	cmdSearch := new(CmdSearch)
+
+	cmds := []*cli.Command{
+		{
+			Name:   "search",
+			Usage:  "Searches blobs in projects within group",
+			Action: cmdSearch.Search,
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:    "group",
+					Aliases: []string{"g"},
+					Usage:   "Group/Subgroup in GitLab to search in",
+				},
+			},
+		},
+	}
 
 	flags := []cli.Flag{
 		altsrc.NewStringFlag(&cli.StringFlag{
@@ -85,13 +117,15 @@ func buildApp() *cli.App {
 		}),
 	}
 
-	return &cli.App{
-		Name:     "tanuki",
-		Usage:    "Tanuki is a simple yet powerful gitlab search",
-		Commands: cmds,
-		Flags:    flags,
-		Before:   altsrc.InitInputSourceWithContext(flags, readConfigFile),
-	}
+	app := cli.NewApp()
+
+	app.Name = "tanuki"
+	app.Usage = "Tanuki is a simple yet powerful gitlab search"
+	app.Commands = cmds
+	app.Flags = flags
+	app.Before = altsrc.InitInputSourceWithContext(flags, readConfigFile)
+
+	return app
 }
 
 func main() {

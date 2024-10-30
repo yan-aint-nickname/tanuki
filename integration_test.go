@@ -10,25 +10,19 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/xanzy/go-gitlab"
 )
 
-// The whole setup func is copy-paste from xanzy/go-gitlab.
-func setup(t *testing.T) (*http.ServeMux, *gitlab.Client) {
+func setup(t *testing.T) (*http.ServeMux, *GitlabClient) {
 	mux := http.NewServeMux()
 
 	server := httptest.NewServer(mux)
 
 	t.Cleanup(server.Close)
 
-	client, err := gitlab.NewClient("",
-		gitlab.WithBaseURL(server.URL),
-		// Disable backoff to speed up tests that expect errors.
-		gitlab.WithCustomBackoff(func(_, _ time.Duration, _ int, _ *http.Response) time.Duration {
-			return 0
-		}))
+	client, err := NewGitlabClient("test-token", server.URL)
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +37,7 @@ func TestSearchListGroup(t *testing.T) {
 			fmt.Fprint(w, `[{"id": 1, "name": "Foobar Group"}]`)
 		})
 
-	groups := searchListGroups(client, "foobar")
+	groups := client.searchListGroups("foobar")
 
 	want := &gitlab.Group{ID: 1, Name: "Foobar Group"}
 	g := groups[0][0]
@@ -73,7 +67,7 @@ func TestSearchBlobs(t *testing.T) {
 
 	projs := [][]*gitlab.Project{{&gitlab.Project{ID: 4, Name: "Kenoby"}}}
 
-	for b := range searchBlobs(client, projs, "def hello_there", nil) {
+	for b := range client.searchBlobs(projs, "def hello_there", nil) {
 		if len(b.Blobs) == 0 {
 			t.Errorf("searchBlobs returned +%v, want %+v", b, 1)
 		}
@@ -130,7 +124,7 @@ func TestSearchBlobs2Pages(t *testing.T) {
 
 	listOptions = &gitlab.ListOptions{Page: 1, PerPage: 1}
 
-	blobs := searchBlobs(client, projs, "def hello_there", listOptions)
+	blobs := client.searchBlobs(projs, "def hello_there", listOptions)
 
 	want := 1
 	chanCounter := 0
@@ -159,7 +153,7 @@ func TestSearchListProjects(t *testing.T) {
 	groups := [][]*gitlab.Group{{&gitlab.Group{ID: 1}}}
 
 	listOptions = &gitlab.ListOptions{Page: 1, PerPage: 1}
-	projects := searchListProjects(client, groups, listOptions)
+	projects := client.searchListProjects(groups, listOptions)
 
 	want := [][]*gitlab.Project{{&gitlab.Project{ID: 4, Name: "Kenoby"}}}
 
@@ -194,7 +188,7 @@ func TestSearchListProjects2Pages(t *testing.T) {
 	groups := [][]*gitlab.Group{{&gitlab.Group{ID: 1}}}
 
 	listOptions = &gitlab.ListOptions{Page: 1, PerPage: 1}
-	projects := searchListProjects(client, groups, listOptions)
+	projects := client.searchListProjects(groups, listOptions)
 
 	want := [][]*gitlab.Project{{&gitlab.Project{ID: 4, Name: "Kenoby"}}, {&gitlab.Project{ID: 5, Name: "Ahsoka"}}}
 
