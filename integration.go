@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"iter"
-	"log"
 
 	"github.com/gookit/color"
 	"github.com/xanzy/go-gitlab"
@@ -14,7 +12,7 @@ const (
 )
 
 var (
-	listOptions = &gitlab.ListOptions{Page: 1, PerPage: 10}
+	listOptions = &gitlab.ListOptions{Pagination: "keyset"}
 )
 
 type ComposedBlob struct {
@@ -26,6 +24,12 @@ type GitlabClient struct {
 	*gitlab.Client
 }
 
+type stopIterationError struct{}
+
+func (e *stopIterationError) Error() string {
+	return "Stop iteration"
+}
+
 func NewGitlabClient(token, server string) (*GitlabClient, error) {
 	git, err := gitlab.NewClient(token, gitlab.WithBaseURL(server))
 	if err != nil {
@@ -34,79 +38,70 @@ func NewGitlabClient(token, server string) (*GitlabClient, error) {
 	return &GitlabClient{git}, nil
 }
 
-func (git *GitlabClient) searchListGroups(groupName string) [][]*gitlab.Group {
-	g := make([][]*gitlab.Group, 0, 10)
-	for {
-		groups, resp, err := git.Groups.SearchGroup(groupName)
+func (git *GitlabClient) searchListGroups(groupName string) func() ([]*gitlab.Group, error) {
+	var nextLink string
+
+	return func() ([]*gitlab.Group, error) {
+		groups, resp, err := git.Groups.SearchGroup(groupName, gitlab.WithKeysetPaginationParameters(nextLink))
 		if err != nil {
-			log.Fatal(err)
+			return nil, err
 		}
-		g = append(g, groups)
-		if resp.NextPage == 0 {
-			break
+		nextLink = resp.NextLink
+		if nextLink == "" {
+			return groups, &stopIterationError{}
 		}
+		return groups, nil
 	}
-	return g
 }
 
-func (git *GitlabClient) searchListProjects(
-	groups [][]*gitlab.Group,
+func (git *GitlabClient) listGroupProjects(
+	groupId int,
 	listOpts *gitlab.ListOptions,
-) [][]*gitlab.Project {
-	p := make([][]*gitlab.Project, 0, 20)
-	if listOpts == nil {
-		listOpts = listOptions
-	}
-	opts := &gitlab.ListGroupProjectsOptions{ListOptions: *listOpts}
-	for _, group := range groups {
-		for _, g := range group {
-			for {
-				projects, resp, err := git.Groups.ListGroupProjects(g.ID, opts)
-				if err != nil {
-					log.Fatal(err)
-				}
-				p = append(p, projects)
-				if resp.NextPage == 0 {
-					break
-				}
-				opts.Page = resp.NextPage
-			}
-		}
-	}
-	return p
-}
+) func() ([]*gitlab.Project, error) {
 
-func (git *GitlabClient) searchBlobs(
-	projects [][]*gitlab.Project,
-	searchStr string,
-	listOpts *gitlab.ListOptions,
-) iter.Seq2[*ComposedBlob, error] {
-	return func(yield func(*ComposedBlob, error) bool) {
+	var nextLink string
+
+	return func() ([]*gitlab.Project, error) {
 		if listOpts == nil {
 			listOpts = listOptions
 		}
-
-		opts := &gitlab.SearchOptions{ListOptions: *listOpts}
-		for _, proj := range projects {
-			for _, p := range proj {
-				for {
-					blobs, resp, err := git.Search.BlobsByProject(p.ID, searchStr, opts)
-					if err != nil {
-						yield(&ComposedBlob{}, err)
-						return
-					}
-					b := &ComposedBlob{Blobs: blobs, Project: p}
-					if !yield(b, nil) {
-						return
-					}
-
-					if resp.NextPage == 0 {
-						break
-					}
-					opts.Page = resp.NextPage
-				}
-			}
+		opts := &gitlab.ListGroupProjectsOptions{ListOptions: *listOpts}
+		projects, resp, err := git.Groups.ListGroupProjects(groupId, opts, gitlab.WithKeysetPaginationParameters(nextLink))
+		if err != nil {
+			return nil, err
 		}
+		nextLink = resp.NextLink
+		if nextLink == "" {
+			return projects, &stopIterationError{}
+		}
+		return projects, nil
+	}
+}
+
+func (git *GitlabClient) searchProjectBlobs(
+	projectId int,
+	searchStr string,
+	listOpts *gitlab.ListOptions,
+) func() ([]*gitlab.Blob, error) {
+
+	var nextLink string
+
+	return func() ([]*gitlab.Blob, error) {
+		if listOpts == nil {
+			listOpts = listOptions
+		}
+		opts := &gitlab.SearchOptions{ListOptions: *listOpts}
+
+		blobs, resp, err := git.Search.BlobsByProject(projectId, searchStr, opts, gitlab.WithKeysetPaginationParameters(nextLink))
+
+		if err != nil {
+			return nil, err
+		}
+		nextLink = resp.NextLink
+		if nextLink == "" {
+			return blobs, &stopIterationError{}
+		}
+		return blobs, nil
 	}
 }
 

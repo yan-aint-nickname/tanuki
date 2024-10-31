@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"path"
@@ -58,19 +57,33 @@ func (cmdSearch *CmdSearch) Search(c *cli.Context) error {
 	}
 	client := cmdSearch.gitlabClient
 
-	fmt.Printf("%+v", c.String("group"))
-	// fmt.Printf("%+v", c.Args().First())
-
 	groups := client.searchListGroups(c.String("group"))
-	projects := client.searchListProjects(groups, nil)
 
-	blobs := client.searchBlobs(projects, c.Args().First(), nil)
-
-	for blob, err := range blobs {
-		if err != nil {
-			return err
+	for {
+		nextGroups, err := groups()
+		for _, group := range nextGroups {
+			projects := client.listGroupProjects(group.ID, nil)
+			for {
+				nextProjects, err := projects()
+				for _, proj := range nextProjects {
+					blobs := client.searchProjectBlobs(proj.ID, c.Args().First(), nil)
+					for {
+						nextBlobs, err := blobs()
+						compBlob := &ComposedBlob{Blobs: nextBlobs, Project: proj}
+						prettyPrintComposedBlobs(compBlob)
+						if err != nil {
+							break
+						}
+					}
+				}
+				if err != nil {
+					break
+				}
+			}
 		}
-		prettyPrintComposedBlobs(blob)
+		if err != nil {
+			break
+		}
 	}
 	return nil
 }
