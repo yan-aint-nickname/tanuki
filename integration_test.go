@@ -40,9 +40,15 @@ func TestSearchListGroup(t *testing.T) {
 	groups := client.searchListGroups("foobar")
 
 	want := &gitlab.Group{ID: 1, Name: "Foobar Group"}
-	g := groups[0][0]
-	if !reflect.DeepEqual(want, g) {
-		t.Errorf("searchListGroups returned +%v, want %+v", g, want)
+
+	for g, err := range groups {
+		if err != nil {
+			t.Error(err)
+		}
+		if !reflect.DeepEqual(want, g[0]) {
+			t.Errorf("searchListGroups returned +%v, want %+v", g[0], want)
+		}
+		break
 	}
 }
 
@@ -65,9 +71,13 @@ func TestSearchBlobs(t *testing.T) {
 ]`)
 		})
 
-	projs := [][]*gitlab.Project{{&gitlab.Project{ID: 4, Name: "Kenoby"}}}
+	projs := []*gitlab.Project{{ID: 4, Name: "Kenoby"}}
+	blobs := client.searchBlobs(projs, "def hello_there")
 
-	for b := range client.searchBlobs(projs, "def hello_there", nil) {
+	for b, err := range blobs {
+		if err != nil {
+			t.Error(err)
+		}
 		if len(b.Blobs) == 0 {
 			t.Errorf("searchBlobs returned +%v, want %+v", b, 1)
 		}
@@ -120,11 +130,9 @@ func TestSearchBlobs2Pages(t *testing.T) {
 			}
 		})
 
-	projs := [][]*gitlab.Project{{&gitlab.Project{ID: 4, Name: "Kenoby"}}}
+	projs := []*gitlab.Project{{ID: 4, Name: "Kenoby"}}
 
-	listOptions = &gitlab.ListOptions{Page: 1, PerPage: 1}
-
-	blobs := client.searchBlobs(projs, "def hello_there", listOptions)
+	blobs := client.searchBlobs(projs, "def hello_there", WithPerPage(1), WithStartPage(1))
 
 	want := 1
 	chanCounter := 0
@@ -150,15 +158,19 @@ func TestSearchListProjects(t *testing.T) {
 			fmt.Fprintf(w, `[{"id": 4, "name": "Kenoby"}]`)
 		})
 
-	groups := [][]*gitlab.Group{{&gitlab.Group{ID: 1}}}
+	groups := []*gitlab.Group{{ID: 1, Name: "Generals"}}
 
-	listOptions = &gitlab.ListOptions{Page: 1, PerPage: 1}
-	projects := client.searchListProjects(groups, listOptions)
+	projects := client.searchListProjects(groups, WithPerPage(1), WithStartPage(1))
 
-	want := [][]*gitlab.Project{{&gitlab.Project{ID: 4, Name: "Kenoby"}}}
-
-	if !reflect.DeepEqual(want, projects) {
-		t.Errorf("searchListProjects returned +%v, want %+v", projects, want)
+	want := []*gitlab.Project{{ID: 4, Name: "Kenoby"}}
+	for p, err := range projects {
+		if err != nil {
+			t.Error(err)
+		}
+		if !reflect.DeepEqual(want, p) {
+			t.Errorf("searchListProjects returned +%v, want %+v", p, want)
+		}
+		break
 	}
 }
 
@@ -185,15 +197,21 @@ func TestSearchListProjects2Pages(t *testing.T) {
 			}
 		})
 
-	groups := [][]*gitlab.Group{{&gitlab.Group{ID: 1}}}
+	groups := []*gitlab.Group{{ID: 1}}
 
-	listOptions = &gitlab.ListOptions{Page: 1, PerPage: 1}
-	projects := client.searchListProjects(groups, listOptions)
+	projects := client.searchListProjects(groups, WithPerPage(1), WithStartPage(1))
 
-	want := [][]*gitlab.Project{{&gitlab.Project{ID: 4, Name: "Kenoby"}}, {&gitlab.Project{ID: 5, Name: "Ahsoka"}}}
+	want := [][]*gitlab.Project{{{ID: 4, Name: "Kenoby"}}, {{ID: 5, Name: "Ahsoka"}}}
 
-	if !reflect.DeepEqual(want, projects) {
-		t.Errorf("searchListProjects returned +%v, want %+v", projects, want)
+	pageCounter := 0
+	for p, err := range projects {
+		if err != nil {
+			t.Error(err)
+		}
+		if !reflect.DeepEqual(want[pageCounter], p) {
+			t.Errorf("searchListProjects returned %v, want %v", p, want[pageCounter])
+		}
+		pageCounter++
 	}
 }
 
