@@ -12,7 +12,7 @@ import (
 
 func createConfigFile(f string) error {
 	if _, err := os.Stat(f); os.IsNotExist(err) {
-		dir, _ := path.Split(f)
+		dir := path.Dir(f)
 		if err := os.MkdirAll(dir, 0750); err != nil {
 			return err
 		}

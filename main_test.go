@@ -29,7 +29,11 @@ func TestGetConfigPath(t *testing.T) {
 }
 
 func TestReadConfigFile(t *testing.T) {
-	p := path.Join("test_config.yaml")
+	pwd, err := os.Getwd()
+	if err != nil {
+		t.Error(err)
+	}
+	p := path.Join(pwd, "test_config.yaml")
 
 	f, err := os.Create(p)
 
@@ -141,4 +145,63 @@ func TestCmdSearch(t *testing.T) {
 	if ok := strings.Contains(string(out), "def hello_there()"); !ok {
 		t.Errorf("out does not contains founded blobs want: `def hello_there()`, have: %s", string(out))
 	}
+}
+
+func TestCreateConfigFile(t *testing.T) {
+	pwd, err := os.Getwd()
+	if err != nil {
+		t.Error(err)
+	}
+	filename := path.Join(pwd, "test_config.yaml")
+
+	if err := createConfigFile(filename); err != nil {
+		t.Error(err)
+	}
+
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		t.Error(err)
+	}
+
+	t.Cleanup(func() {
+		if err := os.Remove(filename); err != nil {
+			t.Error(err)
+		}
+	})
+}
+
+func TestCreateConfigFileDirFail(t *testing.T) {
+	pwd, err := os.Getwd()
+	if err != nil {
+		t.Error(err)
+	}
+	parentDir := path.Join(pwd, "test_dir_readonly")
+
+	if err = os.MkdirAll(parentDir, 0750); err != nil {
+		t.Error(err)
+	}
+
+	if err = os.Chmod(parentDir, 0500); err != nil {
+		t.Error(err)
+	}
+
+	filename := path.Join(parentDir, "test_dir", "test_config.yaml")
+
+	err = createConfigFile(filename)
+
+	if err == nil {
+		t.Errorf("Expected error but got nil %v", err)
+	}
+
+	if !os.IsPermission(err) {
+		t.Errorf("Expected permission error %v", err)
+	}
+
+	t.Cleanup(func() {
+		if err := os.Chmod(parentDir, 0750); err != nil {
+			t.Error(err)
+		}
+		if err := os.RemoveAll(parentDir); err != nil {
+			t.Error(err)
+		}
+	})
 }
