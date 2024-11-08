@@ -292,3 +292,13 @@ func TestNewGitlabClient(t *testing.T) {
 		t.Error("Clients are not equal")
 	}
 }
+
+func TestNewGitlabClientFail(t *testing.T) {
+	token := "test-token"
+	server := "ht!tp://example.com/path"
+	_, err := NewGitlabClient(token, server)
+
+	if err == nil {
+		t.Errorf("Should be error parsing %s", server)
+	}
+}
