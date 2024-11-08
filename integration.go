@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"iter"
 	"log"
+	"reflect"
 
 	"github.com/gookit/color"
 	"github.com/xanzy/go-gitlab"
@@ -13,55 +15,93 @@ const (
 )
 
 var (
-	listOptions = &gitlab.ListOptions{Page: 1, PerPage: 10}
+	listOptions = gitlab.ListOptions{Page: 1, PerPage: 10}
 )
+
+type Option func(any)
+
+func WithStartPage(p int) Option {
+	return func(o any) {
+		switch opts := o.(type) {
+		case *gitlab.SearchOptions:
+		case *gitlab.ListGroupProjectsOptions:
+			opts.ListOptions.Page = p
+		default:
+			log.Printf("Unsupported options type: %T\n", o)
+		}
+	}
+}
+
+func WithPerPage(p int) Option {
+	return func(o any) {
+		switch opts := o.(type) {
+		case *gitlab.SearchOptions:
+		case *gitlab.ListGroupProjectsOptions:
+			opts.ListOptions.PerPage = p
+		default:
+			log.Printf("Unsupported options type: %T\n", o)
+		}
+	}
+}
 
 type ComposedBlob struct {
 	Project *gitlab.Project
 	Blobs   []*gitlab.Blob
 }
 
-func NewGitlabClient(token, server string) (*gitlab.Client, error) {
+type GitlabClient struct {
+	*gitlab.Client
+}
+
+func NewGitlabClient(token, server string) (*GitlabClient, error) {
 	git, err := gitlab.NewClient(token, gitlab.WithBaseURL(server))
 	if err != nil {
 		return nil, err
 	}
-	return git, nil
+	return &GitlabClient{git}, nil
 }
 
-func searchListGroups(git *gitlab.Client, groupName string) [][]*gitlab.Group {
-	g := make([][]*gitlab.Group, 0, 10)
-	for {
-		groups, resp, err := git.Groups.SearchGroup(groupName)
-		if err != nil {
-			log.Fatal(err)
-		}
-		g = append(g, groups)
-		if resp.NextPage == 0 {
-			break
+func (git *GitlabClient) searchListGroups(groupName string) iter.Seq2[[]*gitlab.Group, error] {
+	return func(yield func([]*gitlab.Group, error) bool) {
+		for {
+			groups, resp, err := git.Groups.SearchGroup(groupName)
+			if err != nil {
+				yield([]*gitlab.Group{}, err)
+				return
+			}
+			if !yield(groups, err) {
+				return
+			}
+
+			if resp.NextPage == 0 {
+				break
+			}
 		}
 	}
-	return g
 }
 
-func searchListProjects(
-	git *gitlab.Client,
-	groups [][]*gitlab.Group,
-	listOpts *gitlab.ListOptions,
-) [][]*gitlab.Project {
-	p := make([][]*gitlab.Project, 0, 20)
-	if listOpts == nil {
-		listOpts = listOptions
-	}
-	opts := &gitlab.ListGroupProjectsOptions{ListOptions: *listOpts}
-	for _, group := range groups {
-		for _, g := range group {
+func (git *GitlabClient) searchListProjects(
+	groups []*gitlab.Group,
+	options ...Option,
+) iter.Seq2[[]*gitlab.Project, error] {
+	return func(yield func([]*gitlab.Project, error) bool) {
+		opts := &gitlab.ListGroupProjectsOptions{}
+		for _, opt := range options {
+			opt(opts)
+		}
+		if reflect.DeepEqual(opts.ListOptions, gitlab.ListOptions{}) {
+			opts.ListOptions = listOptions
+		}
+		for _, g := range groups {
 			for {
 				projects, resp, err := git.Groups.ListGroupProjects(g.ID, opts)
 				if err != nil {
-					log.Fatal(err)
+					yield([]*gitlab.Project{}, err)
+					return
 				}
-				p = append(p, projects)
+				if !yield(projects, nil) {
+					return
+				}
 				if resp.NextPage == 0 {
 					break
 				}
@@ -69,29 +109,33 @@ func searchListProjects(
 			}
 		}
 	}
-	return p
 }
 
-func searchBlobs(
-	git *gitlab.Client,
-	projects [][]*gitlab.Project,
+func (git *GitlabClient) searchBlobs(
+	projects []*gitlab.Project,
 	searchStr string,
-	listOpts *gitlab.ListOptions,
-) []*ComposedBlob {
-	b := make([]*ComposedBlob, 0, 20)
-	if listOpts == nil {
-		listOpts = listOptions
-	}
+	options ...Option,
+) iter.Seq2[*ComposedBlob, error] {
+	return func(yield func(*ComposedBlob, error) bool) {
+		opts := &gitlab.SearchOptions{}
+		for _, opt := range options {
+			opt(opts)
+		}
+		if reflect.DeepEqual(opts.ListOptions, gitlab.ListOptions{}) {
+			opts.ListOptions = listOptions
+		}
 
-	opts := &gitlab.SearchOptions{ListOptions: *listOpts}
-	for _, proj := range projects {
-		for _, p := range proj {
+		for _, p := range projects {
 			for {
 				blobs, resp, err := git.Search.BlobsByProject(p.ID, searchStr, opts)
 				if err != nil {
-					log.Fatal(err)
+					yield(&ComposedBlob{}, err)
+					return
 				}
-				b = append(b, &ComposedBlob{Blobs: blobs, Project: p})
+				b := &ComposedBlob{Blobs: blobs, Project: p}
+				if !yield(b, nil) {
+					return
+				}
 
 				if resp.NextPage == 0 {
 					break
@@ -100,35 +144,23 @@ func searchBlobs(
 			}
 		}
 	}
-	return b
 }
 
-func prettyPrintComposedBlobs(composed []*ComposedBlob) {
-	for _, c := range composed {
-		for _, blob := range c.Blobs {
-			boldItalic := color.Style{color.OpBold, color.OpItalic}.Render
-			underscore := color.OpUnderscore.Render
-			fmt.Printf(
-				"%s\n%s\n%s",
-				boldItalic(c.Project.Name),
-				underscore(fmt.Sprintf(
-					"%s/blob/%s/%s#L%d",
-					c.Project.WebURL,
-					blob.Ref,
-					blob.Filename,
-					blob.Startline,
-				)),
-				blob.Data,
-			)
-		}
+func prettyPrintComposedBlobs(composed *ComposedBlob) {
+	for _, blob := range composed.Blobs {
+		boldItalic := color.Style{color.OpBold, color.OpItalic}.Render
+		underscore := color.OpUnderscore.Render
+		fmt.Printf(
+			"%s\n%s\n%s",
+			boldItalic(composed.Project.Name),
+			underscore(fmt.Sprintf(
+				"%s/blob/%s/%s#L%d",
+				composed.Project.WebURL,
+				blob.Ref,
+				blob.Filename,
+				blob.Startline,
+			)),
+			blob.Data,
+		)
 	}
-}
-
-func SearchBlobsWithinProjects(client *gitlab.Client, groupName, searchString string) {
-	groups := searchListGroups(client, groupName)
-	projects := searchListProjects(client, groups, nil)
-
-	blobs := searchBlobs(client, projects, searchString, nil)
-
-	prettyPrintComposedBlobs(blobs)
 }

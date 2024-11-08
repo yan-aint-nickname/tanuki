@@ -1,6 +1,6 @@
 module github.com/yan-aint-nickname/tanuki
 
-go 1.21.6
+go 1.23
 
 require (
 	github.com/gookit/color v1.5.4
