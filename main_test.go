@@ -14,7 +14,8 @@ import (
 )
 
 func TestGetConfigPath(t *testing.T) {
-	p, err := getConfigPath()
+	c := NewConfig()
+	err := c.setConfigPath()
 	if err != nil {
 		t.Error(err)
 	}
@@ -23,12 +24,13 @@ func TestGetConfigPath(t *testing.T) {
 		t.Error(err)
 	}
 
-	if ok := strings.Compare(p, want); ok == 0 {
-		t.Errorf("Wrong config-file path want: %s, have: %s", want, p)
+	if ok := strings.Compare(c.filename, want); ok == 0 {
+		t.Errorf("Wrong config-file path want: %s, have: %s", want, c.filename)
 	}
 }
 
 func TestReadConfigFile(t *testing.T) {
+	c := NewConfig()
 	pwd, err := os.Getwd()
 	if err != nil {
 		t.Error(err)
@@ -55,13 +57,17 @@ func TestReadConfigFile(t *testing.T) {
 		t.Error(err)
 	}
 
-	src, err := readConfigFileFn(p)
+	ctx := cli.NewContext(nil, nil, nil)
+
+	c.filename = p
+	src, err := c.readConfigFile(ctx)
 
 	if err != nil {
 		t.Error(err)
 	}
 
 	token, err := src.String("token")
+	print()
 	if err != nil {
 		t.Error(err)
 	}
@@ -74,6 +80,55 @@ func TestReadConfigFile(t *testing.T) {
 		t.Error(err)
 	}
 	if server != "https://some_gitlab_server.com" {
+		t.Errorf("Wrong server %+v", server)
+	}
+}
+
+func TestReadConfigFileFailAndCreate(t *testing.T) {
+	c := NewConfig()
+	pwd, err := os.Getwd()
+	if err != nil {
+		t.Error(err)
+	}
+	c.filename = path.Join(pwd, "test_config.yaml")
+
+	if err != nil {
+		t.Error(err)
+	}
+
+	t.Cleanup(func() {
+		if err = os.Remove(c.filename); err != nil {
+			t.Error(err)
+		}
+	})
+
+	// _, err = f.Write([]byte("server: https://some_gitlab_server.com\ntoken: some_test_token\n"))
+
+	if err != nil {
+		t.Error(err)
+	}
+
+	ctx := cli.NewContext(nil, nil, nil)
+
+	src, err := c.readConfigFile(ctx)
+
+	if err != nil {
+		t.Error(err)
+	}
+
+	token, err := src.String("token")
+	if err != nil {
+		t.Error(err)
+	}
+	if token != "" {
+		t.Errorf("Wrong token %+v", token)
+	}
+
+	server, err := src.String("server")
+	if err != nil {
+		t.Error(err)
+	}
+	if server != "" {
 		t.Errorf("Wrong server %+v", server)
 	}
 }
@@ -107,7 +162,10 @@ func TestCmdSearch(t *testing.T) {
 ]`)
 		})
 
-	app := buildApp()
+	app, err := buildApp()
+	if err != nil {
+		t.Error(err)
+	}
 
 	// NOTE: Do I really need this?
 	fs := flag.NewFlagSet("test", flag.ContinueOnError)

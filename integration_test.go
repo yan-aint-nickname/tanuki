@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/xanzy/go-gitlab"
 )
@@ -21,12 +22,21 @@ func setup(t *testing.T) (*http.ServeMux, *GitlabClient) {
 
 	t.Cleanup(server.Close)
 
-	client, err := NewGitlabClient("test-token", server.URL)
+	client, err := gitlab.NewClient("test-token",
+		gitlab.WithBaseURL(server.URL),
+		// Disable backoff to speed up tests that expect errors.
+		gitlab.WithCustomBackoff(func(_, _ time.Duration, _ int, _ *http.Response) time.Duration {
+			return 0
+		}),
+	)
+	if err != nil {
+		t.Error(err)
+	}
 
 	if err != nil {
 		t.Fatal(err)
 	}
-	return mux, client
+	return mux, &GitlabClient{client}
 }
 
 func TestSearchListGroup(t *testing.T) {
@@ -80,6 +90,31 @@ func TestSearchBlobs(t *testing.T) {
 		}
 		if len(b.Blobs) == 0 {
 			t.Errorf("searchBlobs returned +%v, want %+v", b, 1)
+		}
+	}
+}
+
+func TestSearchBlobsFail(t *testing.T) {
+	mux, client := setup(t)
+
+	mux.HandleFunc("/api/v4/projects/4/-/search",
+		func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, err := w.Write([]byte("Iternal Server Error"))
+			if err != nil {
+				t.Error(err)
+			}
+		})
+
+	projs := []*gitlab.Project{{ID: 4, Name: "Kenoby"}}
+	blobs := client.searchBlobs(projs, "def hello_there")
+
+	for b, err := range blobs {
+		if err == nil {
+			t.Error(err)
+		}
+		if len(b.Blobs) != 0 {
+			t.Errorf("searchBlobs returned +%v, want %+v", b, 0)
 		}
 	}
 }
@@ -239,5 +274,21 @@ func TestPrettyPrint(t *testing.T) {
 
 	if ok := strings.Contains(string(out), "def hello_there()"); !ok {
 		t.Errorf("out does not contains founded blobs want: `def hello_there()`, have: %s", string(out))
+	}
+}
+
+func TestNewGitlabClient(t *testing.T) {
+	token := "test-token"
+	server := "test-server"
+	c1, err := NewGitlabClient(token, server)
+	if err != nil {
+		t.Error(err)
+	}
+	c2, err := gitlab.NewClient(token, gitlab.WithBaseURL(server))
+	if err != nil {
+		t.Error(err)
+	}
+	if c1.BaseURL().String() != c2.BaseURL().String() {
+		t.Error("Clients are not equal")
 	}
 }

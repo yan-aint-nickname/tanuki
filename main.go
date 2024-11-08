@@ -10,6 +10,10 @@ import (
 	"github.com/urfave/cli/v2/altsrc"
 )
 
+type Config struct {
+	filename string
+}
+
 func createConfigFile(f string) error {
 	if _, err := os.Stat(f); os.IsNotExist(err) {
 		dir := path.Dir(f)
@@ -23,24 +27,29 @@ func createConfigFile(f string) error {
 	return nil
 }
 
-func getConfigPath() (string, error) {
+func (c *Config) setConfigPath() error {
 	home, err := homedir.Dir()
 	if err != nil {
-		return "", err
+		return err
 	}
-	return path.Join(home, ".config", "tanuki", "config.yaml"), nil
+	c.filename = path.Join(home, ".config", "tanuki", "config.yaml")
+	return nil
 }
 
-func readConfigFileFn(filename string) (src altsrc.InputSourceContext, err error) {
-	if src, err = altsrc.NewYamlSourceFromFile(filename); err == nil {
+func NewConfig() *Config {
+	return &Config{}
+}
+
+func (c Config) readConfigFile(_ *cli.Context) (altsrc.InputSourceContext, error) {
+	if src, err := altsrc.NewYamlSourceFromFile(c.filename); err == nil {
 		return src, nil
 	}
 
-	if err = createConfigFile(filename); err != nil {
+	if err := createConfigFile(c.filename); err != nil {
 		return nil, err
 	}
 
-	return altsrc.NewYamlSourceFromFile(filename)
+	return altsrc.NewYamlSourceFromFile(c.filename)
 }
 
 type CmdSearch struct {
@@ -80,15 +89,7 @@ func (cmdSearch *CmdSearch) Search(c *cli.Context) error {
 	return nil
 }
 
-func readConfigFile(_ *cli.Context) (src altsrc.InputSourceContext, err error) {
-	f, err := getConfigPath()
-	if err != nil {
-		return nil, err
-	}
-	return readConfigFileFn(f)
-}
-
-func buildApp() *cli.App {
+func buildApp() (*cli.App, error) {
 	cmdSearch := new(CmdSearch)
 
 	cmds := []*cli.Command{
@@ -122,19 +123,27 @@ func buildApp() *cli.App {
 		}),
 	}
 
+	config := NewConfig()
+	if err := config.setConfigPath(); err != nil {
+		return nil, err
+	}
+
 	app := cli.NewApp()
 
 	app.Name = "tanuki"
 	app.Usage = "Tanuki is a simple yet powerful gitlab search"
 	app.Commands = cmds
 	app.Flags = flags
-	app.Before = altsrc.InitInputSourceWithContext(flags, readConfigFile)
+	app.Before = altsrc.InitInputSourceWithContext(flags, config.readConfigFile)
 
-	return app
+	return app, nil
 }
 
 func main() {
-	app := buildApp()
+	app, err := buildApp()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)
